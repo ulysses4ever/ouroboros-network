@@ -27,6 +27,7 @@ instance ( ProtocolLedgerView (SimpleBlock SimpleMockCrypto ext)
          , Show ext
          , Typeable ext
          , Serialise ext
+         , SerialiseTag ext
          , ForgeExt (BlockProtocol (SimpleBlock SimpleMockCrypto ext))
                     SimpleMockCrypto
                     ext

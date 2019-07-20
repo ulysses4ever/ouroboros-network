@@ -64,6 +64,8 @@ import           Ouroboros.Consensus.Util.ThreadRegistry
 import           Ouroboros.Storage.ChainDB.API (ChainDB)
 import qualified Ouroboros.Storage.ChainDB.API as ChainDB
 
+import Debug.Trace
+
 
 {-------------------------------------------------------------------------------
   Relay node
@@ -311,7 +313,7 @@ forkBlockProduction IS{..} =
                                        prevPoint
                                        prevNo
                                        (map fst snapshotTxs)
-            return $ Just newBlock
+            return $ Just $ trace "producing block" newBlock
 
       -- Note that there is a possible race condition here: we have produced a
       -- block containing valid transactions w.r.t. the current ledger state

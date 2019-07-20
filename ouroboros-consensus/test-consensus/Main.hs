@@ -6,6 +6,7 @@ import qualified Test.Consensus.BlockchainTime (tests)
 import qualified Test.Consensus.ChainSyncClient (tests)
 import qualified Test.Consensus.Mempool (tests)
 import qualified Test.Dynamic.BFT (tests)
+import qualified Test.Dynamic.HardFork (tests)
 import qualified Test.Dynamic.LeaderSchedule (tests)
 import qualified Test.Dynamic.PBFT (tests)
 import qualified Test.Dynamic.Praos (tests)
@@ -20,6 +21,7 @@ tests =
   , Test.Consensus.ChainSyncClient.tests
   , Test.Consensus.Mempool.tests
   , Test.Dynamic.BFT.tests
+  , Test.Dynamic.HardFork.tests
   , Test.Dynamic.LeaderSchedule.tests
   , Test.Dynamic.PBFT.tests
   , Test.Dynamic.Praos.tests

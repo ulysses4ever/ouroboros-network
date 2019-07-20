@@ -71,6 +71,9 @@ import qualified Ouroboros.Storage.Util.ErrorHandling as EH
 
 import           Test.Dynamic.TxGen
 
+import Debug.Trace
+import Data.Maybe (catMaybes)
+
 -- | Interface provided by 'ouroboros-network'.  At the moment
 -- 'ouroboros-network' only provides this interface in 'IO' backed by sockets,
 -- we cook up here one using 'NodeChans'.
@@ -198,6 +201,8 @@ broadcastNetwork registry testBtime numCoreNodes pInfo initRNG slotLen = do
     nodes <- forM coreNodeIds $ \coreNodeId -> do
       node <- createAndConnectNode chans varRNG coreNodeId
       return (coreNodeId, node)
+    traceM "there!"
+    traceM "there!"
 
     -- Wait a random amount of time after the final slot for the block fetch
     -- and chain sync to finish
@@ -226,13 +231,15 @@ broadcastNetwork registry testBtime numCoreNodes pInfo initRNG slotLen = do
                -> Mempool m blk TicketNo
                -> m ()
     txProducer cfg produceDRG getExtLedger mempool =
-      onSlotChange btime $ \_curSlotNo -> do
+      onSlotChange btime $ \curSlotNo -> do
         drg <- produceDRG
         txs <- atomically $ do
           ledger <- ledgerState <$> getExtLedger
           varDRG <- newTVar drg
-          simChaChaT varDRG id $ testGenTxs numCoreNodes cfg ledger
-        void $ addTxs mempool txs
+          simChaChaT varDRG id $ testGenTxs numCoreNodes cfg curSlotNo ledger
+        res <- addTxs mempool txs
+        let errs = catMaybes $ snd <$> res
+        unless (Prelude.null errs) $ traceShowM errs
 
     createCommunicationChannels :: m (NodeChans m NodeId blk)
     createCommunicationChannels = fmap Map.fromList $ forM nodeIds $ \us ->
@@ -282,7 +289,7 @@ broadcastNetwork registry testBtime numCoreNodes pInfo initRNG slotLen = do
                                         else Nothing
         , cdbGenesis          = return initLedger
         -- Misc
-        , cdbTracer           = nullTracer
+        , cdbTracer           = showTracing (Tracer traceM)
         , cdbThreadRegistry   = registry
         , cdbGcDelay          = 0
         }
@@ -319,7 +326,7 @@ broadcastNetwork registry testBtime numCoreNodes pInfo initRNG slotLen = do
       chainDB <- ChainDB.openDB args
 
       let nodeParams = NodeParams
-            { tracers            = nullTracers
+            { tracers            = showTracers (Tracer (traceM . (show coreNodeId <>)))
             , threadRegistry     = registry
             , maxClockSkew       = ClockSkew 1
             , cfg                = pInfoConfig
@@ -391,4 +398,5 @@ type TracingConstraints blk =
   ( Show blk
   , Show (Header blk)
   , Show (GenTx blk)
+  , Show (ApplyTxErr blk)
   )

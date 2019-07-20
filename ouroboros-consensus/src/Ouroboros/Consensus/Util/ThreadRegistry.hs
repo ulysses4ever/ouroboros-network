@@ -34,6 +34,8 @@ import           Control.Monad.Class.MonadFork hiding (fork)
 import           Control.Monad.Class.MonadSTM
 import           Control.Monad.Class.MonadThrow hiding (handle)
 
+import Debug.Trace
+
 {-------------------------------------------------------------------------------
   Public API
 -------------------------------------------------------------------------------}
@@ -106,6 +108,7 @@ forkLinked :: forall m a. (MonadAsync m, MonadFork m, MonadMask m)
            -> m (Async m a)
 forkLinked threadRegistry action = do
     me <- myThreadId
+    traceShowM me
     fork threadRegistry $
       action `catch` \e -> do
         case fromException e of
