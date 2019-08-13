@@ -43,6 +43,7 @@ import           Ouroboros.Network.Protocol.BlockFetch.Type
 import           Ouroboros.Network.Protocol.ChainSync.Type
 import           Ouroboros.Network.Protocol.TxSubmission.Type
 
+import           Ouroboros.Consensus.Block
 import           Ouroboros.Consensus.BlockchainTime
 import           Ouroboros.Consensus.ChainSyncClient (ClockSkew (..))
 import           Ouroboros.Consensus.Ledger.Abstract
@@ -71,8 +72,14 @@ import qualified Ouroboros.Storage.Util.ErrorHandling as EH
 
 import           Test.Dynamic.TxGen
 
-import Debug.Trace
-import Data.Maybe (catMaybes)
+import           Control.Exception (evaluate)
+import           Data.Maybe (catMaybes)
+import           Data.Typeable (typeOf)
+import           Debug.Trace
+import           Ouroboros.Consensus.Protocol.HardFork
+import           Ouroboros.Consensus.Protocol.PBFT
+import           Ouroboros.Consensus.Protocol.Praos
+import           System.IO.Unsafe (unsafePerformIO)
 
 -- | Interface provided by 'ouroboros-network'.  At the moment
 -- 'ouroboros-network' only provides this interface in 'IO' backed by sockets,
@@ -195,6 +202,13 @@ broadcastNetwork :: forall m blk.
                                   ))
 broadcastNetwork registry testBtime numCoreNodes pInfo initRNG slotLen = do
     chans :: NodeChans m NodeId blk <- createCommunicationChannels
+
+    traceM "BEFORE"
+    traceM $ "WAIT FOR IT: " <> show (typeOf (undefined :: blk))
+    traceM $ "WAIT FOR IT: " <> show (typeOf (undefined :: BlockProtocol (Forked (SimpleBlock' SimpleMockCrypto (SimplePBftExt SimpleMockCrypto PBftMockCrypto) (SimplePBftExt SimpleMockCrypto PBftMockCrypto)) (SimpleBlock' SimpleMockCrypto (SimplePraosExt SimpleMockCrypto PraosMockCrypto) (SimplePraosExt SimpleMockCrypto PraosMockCrypto)))))
+    traceM $ "WAIT FOR IT: " <> show (typeOf (undefined :: BlockProtocol blk))
+    protocolSecurityParam (pInfoConfig (pInfo (CoreNodeId 0))) `seq` return ()
+    traceM "GOT IT"
 
     varRNG <- atomically $ newTVar initRNG
 

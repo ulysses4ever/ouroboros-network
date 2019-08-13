@@ -42,12 +42,7 @@ prop_simple_hard_fork_convergence
   -> Property
 prop_simple_hard_fork_convergence sp numCoreNodes@(NumCoreNodes _nn) _ =
   prop_simple_protocol_convergence
-    ( \nid ->
-      protocolInfo
-        numCoreNodes
-        nid
-        (ProtocolMockHardFork defaultDemoPBftParams defaultDemoPraosParams)
-    )
+    ( \nid -> error "hehe")
     isValid
     numCoreNodes
     15

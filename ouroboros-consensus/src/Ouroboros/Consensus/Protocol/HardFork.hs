@@ -106,7 +106,7 @@ class (OuroborosTag p1, OuroborosTag p2) => CanHardFork p1 p2 where
 
 
 -- | A sum type to represent values before and after a hard fork
-data Forked a b = BeforeFork a | AfterFork b
+data Forked a b = BeforeFork !a | AfterFork !b
   deriving (Eq, Ord, Show)
 
 instance Bifunctor Forked where
@@ -240,8 +240,8 @@ instance CanHardFork p1 p2 => OuroborosTag (p1 `HardForksTo` p2) where
   -- Store configuration for both protocols
   data NodeConfig (p1 `HardForksTo` p2)
     = ForkedNodeConfig
-        { nodeConfigBeforeFork :: NodeConfig p1
-        , nodeConfigAfterFork :: NodeConfig p2
+        { nodeConfigBeforeFork :: !(NodeConfig p1)
+        , nodeConfigAfterFork :: !(NodeConfig p2)
         }
 
   type NodeState (p1 `HardForksTo` p2) = Forked (NodeState p1) (NodeState p2)
@@ -357,7 +357,7 @@ instance CanHardFork p1 p2 => OuroborosTag (p1 `HardForksTo` p2) where
         throwE OldHeaderAfterFork
 
   -- TODO: This will have to change signature to take into account the fork
-  protocolSecurityParam nodeConfig = protocolSecurityParam (nodeConfigBeforeFork nodeConfig)
+  protocolSecurityParam nodeConfig = error "TADA" -- protocolSecurityParam (nodeConfigBeforeFork nodeConfig)
 
   rewindChainState
     ForkedNodeConfig {nodeConfigBeforeFork, nodeConfigAfterFork}

@@ -13,7 +13,7 @@ module Test.Dynamic.TxGen
   ) where
 
 import           Control.Monad (replicateM)
-import           Control.Monad.Trans.Except (runExcept)
+import           Control.Monad.Except (runExcept)
 import           Crypto.Number.Generate (generateBetween)
 import           Data.Either (fromRight)
 import qualified Data.Map.Strict as Map

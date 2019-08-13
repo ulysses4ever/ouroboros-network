@@ -379,4 +379,4 @@ instance
   -- This is safe as we know they're both 'MockState'
   translateLedgerStateForHardFork = unsafeCoerce
 
-  translateHeaderHash = unsafeCoerce
+  translateHeaderHash = error "OOPS" -- unsafeCoerce
