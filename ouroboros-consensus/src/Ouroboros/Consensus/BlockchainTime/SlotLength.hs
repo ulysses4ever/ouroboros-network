@@ -15,11 +15,15 @@ import           Data.Fixed
 import           Data.Time
 import           GHC.Generics (Generic)
 
-import           Cardano.Prelude (NoUnexpectedThunks)
+import           Cardano.Prelude (NoUnexpectedThunks, GShowK1 (..),
+                     gshowsPrecWithoutRecordSyntax)
 
 -- | Slot length
 newtype SlotLength = SlotLength { getSlotLength :: NominalDiffTime }
-  deriving (Show, Eq, Generic, NoUnexpectedThunks)
+  deriving (Eq, Generic, NoUnexpectedThunks)
+
+instance Show SlotLength where
+  showsPrec = gshowsPrecWithoutRecordSyntax
 
 {-------------------------------------------------------------------------------
   Conversions
