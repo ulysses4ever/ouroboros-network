@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE DeriveGeneric       #-}
 {-# LANGUAGE DerivingVia         #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -38,8 +39,10 @@ import           Data.Bifunctor
 import           Data.Fixed
 import           Data.Time
 import           Data.Word
+import           GHC.Generics (Generic)
 
-import           Cardano.Prelude (NoUnexpectedThunks, OnlyCheckIsWHNF (..))
+import           Cardano.Prelude (NoUnexpectedThunks, OnlyCheckIsWHNF (..),
+                     GShowK1 (..), gshowsPrecWithoutRecordSyntax)
 
 import           Ouroboros.Network.Block (SlotNo (..))
 
@@ -88,8 +91,11 @@ data SlotLengths = SlotLengths {
       -- | Segment length and future slot lengths (if hard fork planned)
     , nextSlotLengths   :: Maybe (SegmentLength, SlotLengths)
     }
-  deriving (Show, Eq)
+  deriving (Eq, Generic)
   deriving NoUnexpectedThunks via OnlyCheckIsWHNF "SlotLengths" SlotLengths
+
+instance Show SlotLengths where
+  showsPrec = gshowsPrecWithoutRecordSyntax
 
 -- | Length of a segment of the blockchain (in terms of number of slots)
 --
