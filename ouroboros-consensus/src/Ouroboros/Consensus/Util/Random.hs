@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 
@@ -20,11 +21,15 @@ module Ouroboros.Consensus.Util.Random (
 
 import           Codec.Serialise (Serialise)
 import           Control.Monad.State
+import           Data.List (genericLength)
+import           Data.Word (Word64)
+import           GHC.Generics (Generic)
+
+import           Cardano.Prelude (GShowK1 (..), gshowsPrecWithoutRecordSyntax)
+
 import           Crypto.Number.Generate (generateBetween)
 import           Crypto.Random (ChaChaDRG, MonadPseudoRandom, MonadRandom (..),
                      drgNewTest, randomBytesGenerate, withDRG)
-import           Data.List (genericLength)
-import           Data.Word (Word64)
 
 {-------------------------------------------------------------------------------
   Producing values in MonadRandom
@@ -41,7 +46,10 @@ generateElement xs = do
 -------------------------------------------------------------------------------}
 
 newtype Seed = Seed {getSeed :: (Word64, Word64, Word64, Word64, Word64)}
-    deriving (Show, Eq, Ord, Serialise)
+    deriving (Eq, Ord, Generic, Serialise)
+
+instance Show Seed where
+  showsPrec = gshowsPrecWithoutRecordSyntax
 
 withSeed :: Seed -> MonadPseudoRandom ChaChaDRG a -> a
 withSeed s = fst . withDRG (drgNewTest $ getSeed s)
