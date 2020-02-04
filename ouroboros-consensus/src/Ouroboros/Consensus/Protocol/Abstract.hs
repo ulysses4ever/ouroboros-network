@@ -39,7 +39,8 @@ import           Data.Word (Word64)
 import           GHC.Generics (Generic)
 import           GHC.Stack
 
-import           Cardano.Prelude (NoUnexpectedThunks)
+import           Cardano.Prelude (NoUnexpectedThunks, GShowK1 (..),
+                     gshowsPrecWithoutRecordSyntax)
 
 import           Ouroboros.Network.Block (BlockNo, HeaderHash, Point,
                      SlotNo (..))
@@ -240,7 +241,10 @@ class ( Show (ChainState    p)
 -- NOTE: This talks about the number of /blocks/ we can roll back, not
 -- the number of /slots/.
 newtype SecurityParam = SecurityParam { maxRollbacks :: Word64 }
-  deriving (Show, Eq, Generic, NoUnexpectedThunks)
+  deriving (Eq, Generic, NoUnexpectedThunks)
+
+instance Show SecurityParam where
+  showsPrec = gshowsPrecWithoutRecordSyntax
 
 {-------------------------------------------------------------------------------
   State monad
