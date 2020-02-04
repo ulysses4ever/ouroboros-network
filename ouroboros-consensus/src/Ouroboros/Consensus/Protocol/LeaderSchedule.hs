@@ -17,7 +17,8 @@ import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import           GHC.Generics (Generic)
 
-import           Cardano.Prelude (NoUnexpectedThunks)
+import           Cardano.Prelude (NoUnexpectedThunks, GShowK1 (..),
+                     gshowsPrecWithoutRecordSyntax)
 
 import           Ouroboros.Network.Block (SlotNo (..))
 
@@ -26,8 +27,11 @@ import           Ouroboros.Consensus.Protocol.Abstract
 import           Ouroboros.Consensus.Util.Condense (Condense (..))
 
 newtype LeaderSchedule = LeaderSchedule {getLeaderSchedule :: Map SlotNo [CoreNodeId]}
-    deriving stock    (Show, Eq, Ord, Generic)
+    deriving stock    (Eq, Ord, Generic)
     deriving anyclass (NoUnexpectedThunks)
+
+instance Show LeaderSchedule where
+  showsPrec = gshowsPrecWithoutRecordSyntax
 
 instance Semigroup LeaderSchedule where
     LeaderSchedule l <> LeaderSchedule r =
