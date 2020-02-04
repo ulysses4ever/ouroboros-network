@@ -58,7 +58,8 @@ import qualified Codec.CBOR.Encoding as CBOR
 import           Codec.Serialise (Serialise (..))
 
 import           Cardano.Binary
-import           Cardano.Prelude (NoUnexpectedThunks (..))
+import           Cardano.Prelude (NoUnexpectedThunks (..), GShowK1 (..),
+                     gshowsPrecWithoutRecordSyntax)
 
 import qualified Crypto.Hash as Crypto
 
@@ -84,9 +85,12 @@ import           Ouroboros.Storage.ImmutableDB (BinaryInfo (..), HashInfo (..))
 -------------------------------------------------------------------------------}
 
 newtype ByronHash = ByronHash { unByronHash :: CC.HeaderHash }
-  deriving stock   (Eq, Ord, Show, Generic)
+  deriving stock   (Eq, Ord, Generic)
   deriving newtype (ToCBOR, FromCBOR, Condense)
   deriving anyclass (NoUnexpectedThunks)
+
+instance Show ByronHash where
+  showsPrec = gshowsPrecWithoutRecordSyntax
 
 instance Serialise ByronHash where
   decode = decodeByronHeaderHash
