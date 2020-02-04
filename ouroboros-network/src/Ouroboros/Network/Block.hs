@@ -64,7 +64,8 @@ import           Data.FingerTree.Strict (Measured)
 import           Data.Typeable (Typeable)
 import           GHC.Generics (Generic)
 
-import           Cardano.Prelude (NoUnexpectedThunks)
+import           Cardano.Prelude (NoUnexpectedThunks, GShowK1 (..),
+                     gshowsPrecWithoutRecordSyntax)
 import           Cardano.Slotting.Block
 import           Cardano.Slotting.Slot (SlotNo(..), genesisSlotNo)
 
@@ -146,11 +147,14 @@ castHash (BlockHash b) = BlockHash b
 newtype Point block = Point
     { getPoint :: WithOrigin (Point.Block SlotNo (HeaderHash block))
     }
+  deriving (Generic)
 
 deriving newtype instance StandardHash block => Eq   (Point block)
 deriving newtype instance StandardHash block => Ord  (Point block)
-deriving newtype instance StandardHash block => Show (Point block)
 deriving newtype instance (StandardHash block, Typeable block) => NoUnexpectedThunks (Point block)
+
+instance StandardHash block => Show (Point block) where
+  showsPrec = gshowsPrecWithoutRecordSyntax
 
 pattern GenesisPoint :: Point block
 pattern GenesisPoint = Point Origin
