@@ -333,7 +333,10 @@ instance Monoid BlockMeasure where
 -- putting them on the wire.
 newtype Serialised block = Serialised
   { unSerialised :: Lazy.ByteString }
-  deriving (Eq, Show)
+  deriving (Eq, Generic)
+
+instance Show (Serialised block) where
+  showsPrec = gshowsPrecWithoutRecordSyntax
 
 type instance HeaderHash (Serialised block) = HeaderHash block
 instance StandardHash block => StandardHash (Serialised block)
