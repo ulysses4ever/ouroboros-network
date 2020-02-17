@@ -4,6 +4,12 @@ steps:
     agents:
       system: x86_64-linux
 
+  - label: Check dependencies tags (ie. commits) in cabal.project are present on master branches
+    commands:
+      - "nix build -f ./nix iohkNix.checkRepoTagsOnMasterBranches --arg src ./. --show-trace"
+    agents:
+      system: x86_64-linux
+
   - label: 'stack rebuild'
     env:
       STACK_ROOT: "/build/ouroroboros-network.stack"
