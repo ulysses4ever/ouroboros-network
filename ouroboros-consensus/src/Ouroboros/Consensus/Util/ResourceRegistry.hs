@@ -15,6 +15,7 @@ module Ouroboros.Consensus.Util.ResourceRegistry (
   , ResourceRegistryThreadException
     -- * Creating and releasing the registry itself
   , withRegistry
+  , withRegistryOnError
   , registryThread
     -- * Allocating and releasing regular resources
   , ResourceKey
@@ -566,6 +567,14 @@ releaseResources rr keys releaser = do
 -- See documentation of 'ResourceRegistry' for a detailed discussion.
 withRegistry :: (IOLike m, HasCallStack) => (ResourceRegistry m -> m a) -> m a
 withRegistry = bracket unsafeNewRegistry closeRegistry
+
+-- | Like 'withRegistry', but it only releases the resources of the registry
+-- if there is some exception.
+withRegistryOnError :: (IOLike m, HasCallStack)
+                    => (ResourceRegistry m -> m a)
+                    -> m a
+withRegistryOnError =
+    bracketOnError unsafeNewRegistry closeRegistry
 
 {-------------------------------------------------------------------------------
   Simple queries on the registry
