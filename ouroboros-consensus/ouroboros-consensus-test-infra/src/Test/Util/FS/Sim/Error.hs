@@ -233,6 +233,7 @@ data Errors = Errors
   , _hGetSome                 :: ErrorStreamGetSome
   , _hGetSomeAt               :: ErrorStreamGetSome
   , _hPutSome                 :: ErrorStreamPutSome
+  , _hPutSomeAt               :: ErrorStreamPutSome
   , _hTruncate                :: ErrorStream
   , _hGetSize                 :: ErrorStream
 
@@ -254,6 +255,7 @@ allNull Errors {..} = null _dumpState
                    && null _hGetSome
                    && null _hGetSomeAt
                    && null _hPutSome
+                   && null _hPutSomeAt
                    && null _hTruncate
                    && null _hGetSize
                    && null _createDirectory
@@ -284,6 +286,7 @@ instance Show Errors where
         , s "_hGetSome"                 _hGetSome
         , s "_hGetSomeAt"               _hGetSomeAt
         , s "_hPutSome"                 _hPutSome
+        , s "_hPutSomeAt"               _hPutSomeAt
         , s "_hTruncate"                _hTruncate
         , s "_hGetSize"                 _hGetSize
         , s "_createDirectory"          _createDirectory
@@ -303,6 +306,7 @@ instance Semigroup Errors where
       , _hGetSome                 = combine _hGetSome
       , _hGetSomeAt               = combine _hGetSomeAt
       , _hPutSome                 = combine _hPutSome
+      , _hPutSomeAt               = combine _hPutSomeAt
       , _hTruncate                = combine _hTruncate
       , _hGetSize                 = combine _hGetSize
       , _createDirectory          = combine _createDirectory
@@ -321,7 +325,7 @@ instance Monoid Errors where
   mempty = simpleErrors mempty
 
 -- | Use the given 'ErrorStream' for each field/method. No corruption of
--- 'hPutSome'.
+-- 'hPutSome', 'hPutSomeAt'.
 simpleErrors :: ErrorStream -> Errors
 simpleErrors es = Errors
     { _dumpState                = es
@@ -331,6 +335,7 @@ simpleErrors es = Errors
     , _hGetSome                 =  Left                <$> es
     , _hGetSomeAt               =  Left                <$> es
     , _hPutSome                 = (Left . (, Nothing)) <$> es
+    , _hPutSomeAt               = (Left . (, Nothing)) <$> es
     , _hTruncate                = es
     , _hGetSize                 = es
     , _createDirectory          = es
@@ -371,6 +376,14 @@ genErrors genPartialWrites genSubstituteWithJunk = do
       [ (1, return $ Left FsReachedEOF)
       , (3, Right <$> arbitrary) ]
     _hPutSome   <- mkStreamGen 5 $ QC.frequency
+      [ (1, Left . (FsDeviceFull, ) <$> QC.frequency
+            [ (2, return Nothing)
+            , (1, Just . PartialWrite <$> arbitrary)
+            , (if genSubstituteWithJunk then 1 else 0,
+               Just . SubstituteWithJunk <$> arbitrary)
+            ])
+      , (if genPartialWrites then 3 else 0, Right <$> arbitrary) ]
+    _hPutSomeAt <- mkStreamGen 5 $ QC.frequency
       [ (1, Left . (FsDeviceFull, ) <$> QC.frequency
             [ (2, return Nothing)
             , (1, Just . PartialWrite <$> arbitrary)
@@ -447,6 +460,7 @@ mkSimErrorHasFS fsVar errorsVar =
         , hGetSome   = hGetSome' errorsVar hGetSome
         , hGetSomeAt = hGetSomeAt' errorsVar hGetSomeAt
         , hPutSome   = hPutSome' errorsVar hPutSome
+        , hPutSomeAt = hPutSomeAt' errorsVar hPutSomeAt
         , hTruncate  = \h w ->
             withErr' errorsVar h (hTruncate h w) "hTruncate"
             _hTruncate (\e es -> es { _hTruncate = e })
@@ -623,3 +637,27 @@ hPutSome' errorsVar hPutSomeWrapped handle bs =
           }
       Just (Right partial)          ->
         hPutSomeWrapped handle (hPutSomePartial partial bs)
+
+-- | Similar to 'hPutSome'', but ignores the offset of the file.
+hPutSomeAt' :: (MonadSTM m, MonadThrow m, HasCallStack)
+            => StrictTVar m Errors
+            -> (Handle HandleMock -> BS.ByteString -> AbsOffset -> m Word64)  -- ^ Wrapped 'hPutSome'
+            -> Handle HandleMock -> BS.ByteString -> AbsOffset -> m Word64
+hPutSomeAt' errorsVar hPutSomeAtWrapped handle bs o =
+    next errorsVar _hPutSomeAt (\e es -> es { _hPutSomeAt = e }) >>= \case
+      Nothing                       -> hPutSomeAtWrapped handle bs o
+      Just (Left (errType, mbCorr)) -> do
+        whenJust mbCorr $ \corr ->
+          void $ hPutSomeAtWrapped handle (corrupt bs corr) o
+        throwM FsError
+          { fsErrorType   = errType
+          , fsErrorPath   = fsToFsErrorPathUnmounted $ handlePath handle
+          , fsErrorString = "simulated error: hPutSomeAt" <> case mbCorr of
+              Nothing   -> ""
+              Just corr -> " with corruption: " <> show corr
+          , fsErrorNo     = Nothing
+          , fsErrorStack  = callStack
+          , fsLimitation  = False
+          }
+      Just (Right partial)          ->
+        hPutSomeAtWrapped handle (hPutSomePartial partial bs) o
