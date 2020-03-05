@@ -111,7 +111,6 @@ import           Ouroboros.Network.Point (WithOrigin)
 
 import           Ouroboros.Consensus.Util (whenJust)
 import           Ouroboros.Consensus.Util.IOLike
-import           Ouroboros.Consensus.Util.ResourceRegistry
 
 import           Ouroboros.Consensus.Storage.Common (BlockComponent (..))
 import           Ouroboros.Consensus.Storage.FS.API
@@ -145,34 +144,27 @@ volatileDbIsOpen (VolatileDbOpen _) = True
 volatileDbIsOpen VolatileDbClosed   = False
 
 data InternalState blockId h = InternalState {
-      _currentWriteHandle   :: !(Handle h)
+      _currentWriteHandle :: !(Handle h)
       -- ^ The only open file we append blocks to.
-    , _currentWritePath     :: !FsPath
+    , _currentWritePath   :: !FsPath
       -- ^ The path of the file above.
-    , _currentWriteId       :: !FileId
+    , _currentWriteId     :: !FileId
       -- ^ The 'FileId' of the same file.
-    , _currentWriteOffset   :: !Word64
+    , _currentWriteOffset :: !Word64
       -- ^ The offset of the same file.
-    , _currentMap           :: !(Index blockId)
+    , _currentMap         :: !(Index blockId)
       -- ^ The contents of each file.
-    , _currentRevMap        :: !(ReverseIndex blockId)
+    , _currentRevMap      :: !(ReverseIndex blockId)
       -- ^ Where to find each block based on its slot number.
-    , _currentSuccMap       :: !(SuccessorsIndex blockId)
+    , _currentSuccMap     :: !(SuccessorsIndex blockId)
       -- ^ The successors for each block.
-    , _currentMaxSlotNo     :: !MaxSlotNo
+    , _currentMaxSlotNo   :: !MaxSlotNo
       -- ^ Highest stored SlotNo.
       --
       -- INVARIANT: this is the cached value of:
       -- > FileInfo.maxSlotInFiles (Index.elems (_currentMap st))
-    , _exceptionEncountered :: !Bool
-      -- ^ Indicates that the internal state may be out of sync with the fs.
     }
   deriving (Generic, NoUnexpectedThunks)
-
-tagException :: Bool -> OpenOrClosed blockId h -> OpenOrClosed blockId h
-tagException _ VolatileDbClosed = VolatileDbClosed
-tagException tag (VolatileDbOpen st) =
-    VolatileDbOpen $ st {_exceptionEncountered = tag}
 
 {------------------------------------------------------------------------------
   VolatileDB API
@@ -309,65 +301,74 @@ putBlockImpl :: forall m blockId. (IOLike m, Ord blockId)
              -> BS.Builder
              -> m ()
 putBlockImpl env@VolatileDBEnv{..} blockInfo@BlockInfo { bbid, bslot, bpreBid } builder =
-    withRegistryOnError $ \ rr ->
-      modifyState_ env $ \hasFS@HasFS{..} st@InternalState{..} ->
-        if Map.member bbid _currentRevMap then do
-          traceWith _tracer $ BlockAlreadyHere bbid
-          return st -- putting an existing block is a no-op.
-        else if _exceptionEncountered then do
-          hClose _currentWriteHandle
-          (_, hndl) <- allocate rr
-            (const $ hOpen _currentWritePath (WriteMode AllowExisting))
+    modifyState_ env $ \hasFS@HasFS{..} st ->
+      if Map.member bbid (_currentRevMap st) then do
+        traceWith _tracer $ BlockAlreadyHere bbid
+        return st -- putting an existing block is a no-op.
+      else do
+        let offset = fromIntegral (_currentWriteOffset st)
+        bytesWritten <- hPutAt hasFS (_currentWriteHandle st) builder offset
+        let (st', fileIsFull) = updateStateAfterWrite st bytesWritten
+        if fileIsFull then do
+          hClose (_currentWriteHandle st')
+          let newFile = filePath (_currentWriteId st' + 1)
+          bracketOnError
+            (hOpen newFile (WriteMode AllowExisting))
             hClose
-          writeBytes hasFS rr st hndl
-        else writeBytes hasFS rr st _currentWriteHandle
+            (return . updateStateAfterNewFile st')
+        else
+          return st'
   where
-    writeBytes :: forall h.
-                  HasFS m h
-               -> ResourceRegistry m
-               -> InternalState blockId h
-               -> Handle h
-               -> m (InternalState blockId h)
-    writeBytes hasFS@HasFS{..} rr st@InternalState{..} writeHandle = do
-        bytesWritten <- hPutAt hasFS writeHandle builder offset
-        updateStateAfterWrite hasFS rr st' bytesWritten
-      where
-        st' = st { _currentWriteHandle = writeHandle }
-        offset = fromIntegral _currentWriteOffset
-
-    updateStateAfterWrite :: forall h.
-                             HasFS m h
-                          -> ResourceRegistry m
-                          -> InternalState blockId h
-                          -> Word64
-                          -> m (InternalState blockId h)
-    updateStateAfterWrite hasFS@HasFS{..} rr st@InternalState{..} bytesWritten =
-        if FileInfo.isFull _maxBlocksPerFile fileInfo'
-        then nextFile hasFS env rr st'
-        else return st'
+    updateStateAfterWrite
+      :: InternalState blockId h
+      -> Word64  -- ^ Bytes written
+      -> (InternalState blockId h, Bool)
+    updateStateAfterWrite st@InternalState{..} bytesWritten =
+        (st', FileInfo.isFull _maxBlocksPerFile fileInfo')
       where
         fileInfo = fromMaybe
             (error $ "VolatileDB invariant violation:"
                     ++ "Current write file not found in Index.")
             (Index.lookup _currentWriteId _currentMap)
+
         fileBlockInfo = FileInfo.mkFileBlockInfo (BlockSize bytesWritten) bbid
+
         fileInfo' = FileInfo.addBlock bslot _currentWriteOffset fileBlockInfo fileInfo
+
         currentMap' = Index.insert _currentWriteId fileInfo' _currentMap
+
         internalBlockInfo' = InternalBlockInfo {
             ibFile         = _currentWritePath
           , ibBlockOffset  = _currentWriteOffset
           , ibBlockSize    = BlockSize bytesWritten
           , ibBlockInfo    = blockInfo
           }
+
         currentRevMap' = Map.insert bbid internalBlockInfo' _currentRevMap
+
         st' = st {
             _currentWriteOffset   = _currentWriteOffset + bytesWritten
           , _currentMap           = currentMap'
           , _currentRevMap        = currentRevMap'
           , _currentSuccMap       = insertMapSet _currentSuccMap (bbid, bpreBid)
           , _currentMaxSlotNo     = _currentMaxSlotNo `max` MaxSlotNo bslot
-          , _exceptionEncountered = False
           }
+
+    updateStateAfterNewFile
+      :: InternalState blockId h
+      -> Handle h
+      -> InternalState blockId h
+    updateStateAfterNewFile st@InternalState{..} hndl = st {
+          _currentWriteHandle = hndl
+        , _currentWritePath   = file
+        , _currentWriteId     = currentWriteId'
+        , _currentWriteOffset = 0
+        , _currentMap         = Index.insert currentWriteId' FileInfo.empty
+                                  _currentMap
+        }
+      where
+        currentWriteId' = _currentWriteId + 1
+        file = filePath currentWriteId'
 
 -- | The approach we follow here is to try to garbage collect each file.
 -- For each file we update the fs and then we update the Internal State.
@@ -460,31 +461,6 @@ getMaxSlotNoImpl = getterSTM _currentMaxSlotNo
   Internal functions
 ------------------------------------------------------------------------------}
 
--- | Creates a new file and updates the 'InternalState' accordingly.
--- This may throw an FsError.
-nextFile :: forall h m blockId. IOLike m
-         => HasFS m h
-         -> VolatileDBEnv m blockId
-         -> ResourceRegistry m
-         -> InternalState blockId h
-         -> m (InternalState blockId h)
-nextFile HasFS{..} VolatileDBEnv{..} rr st@InternalState{..} = do
-    hClose _currentWriteHandle
-    (_, hndl) <- allocate rr
-      (const $ hOpen file (WriteMode AllowExisting))
-      hClose
-    return st {
-        _currentWriteHandle = hndl
-      , _currentWritePath   = file
-      , _currentWriteId     = currentWriteId'
-      , _currentWriteOffset = 0
-      , _currentMap         = Index.insert currentWriteId' FileInfo.empty
-                                _currentMap
-      }
-  where
-    currentWriteId' = _currentWriteId + 1
-    file = filePath currentWriteId'
-
 mkInternalStateDB :: forall m blockId e h.
                      ( HasCallStack
                      , MonadThrow m
@@ -560,7 +536,7 @@ mkInternalState hasFS parser tracer maxBlocksPerFile files =
       currentWriteHandle <- hOpen hasFS currentWritePath (WriteMode AllowExisting)
       -- If 'hGetSize' fails, we should close the opened handle that didn't
       -- make it into the state, otherwise we'd leak it.
-      currentWriteOffset <- onException
+      currentWriteOffset <- fromIntegral <$> onException
         (hGetSize hasFS currentWriteHandle)
         (hClose   hasFS currentWriteHandle)
 
@@ -574,7 +550,6 @@ mkInternalState hasFS parser tracer maxBlocksPerFile files =
         , _currentSuccMap       = currentSuccMap'
         , _currentMaxSlotNo     = FileInfo.maxSlotInFiles
                                   (Index.elems currentMap')
-        , _exceptionEncountered = False
         }
   where
     validateFile :: Indices blockId -> (FileId, FsPath) -> m (Indices blockId)
@@ -661,10 +636,8 @@ modifyState VolatileDBEnv{_dbHasFS = hasFS :: HasFS m h, ..} action = do
       where
         (mst', followUp) = case ec of
           -- If we were interrupted, restore the original state.
-          ExitCaseAbort                         ->
-            (mst, return ())
-          ExitCaseException _ex                 ->
-            (tagException True mst, return ())
+          ExitCaseAbort                         -> (mst, return ())
+          ExitCaseException _ex                 -> (mst, return ())
           -- In case of success, update to the newest state.
           ExitCaseSuccess (Right (newState, _)) ->
             (VolatileDbOpen newState, return ())
