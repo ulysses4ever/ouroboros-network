@@ -137,6 +137,8 @@ data ShelleyGenesis c = ShelleyGenesis {
     , sgUpdateQuorum          :: !Word64
     , sgMaxMajorPV            :: !Natural
     , sgMaxLovelaceSupply     :: !Word64
+    , sgMinFeeA               :: !Natural
+    , sgMinFeeB               :: !Natural
     , sgMaxBodySize           :: !Natural
     , sgMaxHeaderSize         :: !Natural
     , sgGenDelegs             :: !(Map (SL.GenKeyHash c) (SL.KeyHash c))
@@ -304,6 +306,8 @@ protocolInfoShelley genesis protVer mbCredentials =
             SL.truncateUnitInterval
           . realToFrac
           $ sgDecentralisationParam genesis
+      , SL._minfeeA   = sgMinFeeA genesis
+      , SL._minfeeB   = sgMinFeeB genesis
       , SL._maxBBSize = sgMaxBodySize genesis
       , SL._maxBHSize = sgMaxHeaderSize genesis
       }
